@@ -352,7 +352,7 @@ Out[26]: (1, 2, [3, 4, 5, 6])
 
 t[2]改动成功，但也有异常抛出，可以通过python可视化工具看看代码发生了什么
 
-<iframe width="800" height="500" frameborder="0" src="http://pythontutor.com/iframe-embed.html#code=t%20%3D%20%281,2,%5B3,4%5D%29%0At%5B2%5D%20%2B%3D%20%5B5,6%5D&codeDivHeight=400&codeDivWidth=350&cumulative=false&curInstr=2&heapPrimitives=nevernest&origin=opt-frontend.js&py=3&rawInputLstJSON=%5B%5D&textReferences=false"> </iframe>
+<iframe width="800" height="200" frameborder="0" src="http://pythontutor.com/iframe-embed.html#code=t%20%3D%20%281,2,%5B3,4%5D%29%0At%5B2%5D%20%2B%3D%20%5B5,6%5D&codeDivHeight=400&codeDivWidth=350&cumulative=false&curInstr=2&heapPrimitives=nevernest&origin=opt-frontend.js&py=3&rawInputLstJSON=%5B%5D&textReferences=false"> </iframe>
 
 造成虽然报错，但依旧会改动成功现象的原因如下：
 
