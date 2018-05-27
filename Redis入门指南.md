@@ -383,7 +383,7 @@ Redis命名最好通过下面规范来命名：
 
 ?> 对象类型：对象ID：对象属性
 
-如使用这个user : 1 : friends键名来存储ID为1的用户好友列表（不要直接复制这里的键名，为了让其正常显示，这里的键名带有空格）
+如使用这个user : 1 : friends键名来存储ID为1的用户好友列表
 
 如果有多个键名中要通过多个单词组成推荐使用"."分隔，这是习惯性做法，在Redis中键名本身不能包含空格
 
@@ -838,32 +838,337 @@ SADD向集合中添加元素，如果键不存在就会自动创建，因为一�
 
 ?> SISMEMBER key member
 
+```bash
+127.0.0.1:6379[1]> SISMEMBER myset 1
+(integer) 1
+127.0.0.1:6379[1]> SISMEMBER myset 666
+(integer) 0
+```
+
+集合间运算
+
+?> SDIFF key [key...]
+?> SINTER key [key...]
+?> SUNION key [key...]
+
+SDIFF 命令让多个集合执行差集运算
+
+```bash
+127.0.0.1:6379[1]> SADD setA 1 2 3
+(integer) 3
+127.0.0.1:6379[1]> SADD setB 2 3 4
+(integer) 3
+127.0.0.1:6379[1]> SDIFF setA setB
+1) "1"
+127.0.0.1:6379[1]> SDIFF setB setA
+1) "4"
+```
+
+![](http://p6un02lk4.bkt.clouddn.com/seta-satb.png)
+
+SDIFF 命令支持同时传入多个键
+
+```bash
+127.0.0.1:6379[1]> SADD setC 2 3
+(integer) 2
+127.0.0.1:6379[1]> SDIFF setA setB setC
+1) "1"
+```
+
+计算顺序：先计算setA-setB，再计算结果与setC的差集
+
+SINTER命令用于计算多个集合的交集运算
+
+![](http://p6un02lk4.bkt.clouddn.com/setaandsatb.png)
+
+```bash
+127.0.0.1:6379[1]> SINTER setA setB
+1) "2"
+2) "3"
+```
+
+SINTER命令也可以支持同时传入多个键
+
+SUNION命令对多个集合执行并集运算
+
+![](http://p6un02lk4.bkt.clouddn.com/seta+setb.png)
+
+```bash
+127.0.0.1:6379[1]> SUNION setA setB
+1) "1"
+2) "2"
+3) "3"
+4) "4"
+```
+
+### 24
+
+获得集合中元素的个数
+
+?> SCARD key
+
+SCARD命令用来获得集合中元素个数
+
+```bash
+127.0.0.1:6379[1]> SCARD setA
+(integer) 3
+```
+
+进行集合运算并将结合存储
+
+?>SDIFFSTORE destination key [key...]
+?>SINTERSTORE destination key [key...]
+?>SUNIONSTORE destination key [key...]
+
+SDIFFSTORE命令与SDIFF命令功能一样，不同在于，SDIFFSTORE不会直接返回运算结果，而是将运算结果存到destination键中，另外两个命令也一样
+
+随机获得集合中元素
+
+?> SRANDMEMBER key [count]
+
+SRANDMEMBER命令用来随机从集合中获取一个元素
+
+```bash
+127.0.0.1:6379[1]> SADD myset 1 2 3 4 5 6 7 8 9 10
+(integer) 7
+127.0.0.1:6379[1]> SRANDMEMBER myset
+"10"
+127.0.0.1:6379[1]> SRANDMEMBER myset
+"10"
+127.0.0.1:6379[1]> SRANDMEMBER myset
+"4"
+127.0.0.1:6379[1]> SRANDMEMBER myset
+"3"
+127.0.0.1:6379[1]> SRANDMEMBER myset
+```
+
+可以传入count参数来一次随机获得多个元素，更加count正负不同，表现不同
+
+1.count>0,SRANDMEMBER会随机从集合中获得count个不重复的元素，如果count大于集合中元素的个数，那么SRANDMEMBER就会返回集合中全部元素
+
+2.count<0,SRANDMEMBER会随机从集合里获得 |count| 个元素，这些元素可能是相同的
+
+SRANDMEMBER命令返回的数据并没有想象中那么随机，这是因为**集合类型采用的存储结构（散列表）造成的**
+
+散列表使用散列函数将元素映射到不同的存储位置上，以实现O(1)时间复杂度，如：
+
+散列表存储元素b时，使用散列函数计算出b的散列值是0，所以将b存入编号为0桶，下次要查找b时通过同样的散列函数就再次计算出b存储的位置了
+
+当两个不同的元素的散列值相同时会发生冲突，Redis使用拉链法来解决冲突问题，即将散列值冲突的元素以链表的形式存到同一个桶中
+
+在使用SRANDMEMBER命令从集合中随机选择一个元素时，Redis首先会从所有的桶中随机选择一个桶，然后再从桶中的所有元素中随机选择一个元素
+
+所以元素所在的桶中的元素数量越少，其被随机选中的可能性越大
+
+![](http://p6un02lk4.bkt.clouddn.com/set%E6%95%A3%E5%88%97%E8%A1%A8.png)
+
+从集合中弹出一个元素
+
+?> SPOP key
+
+因为集合中元素是随机存储的，所以SPOP命令会从集合中随机选择一个元素弹出
+
+### 25
+
+有序集合在集合类型的基础上，有序集合类型为集合中每个元素都关联的一个分数
+
+通过获取集合中的分数，可以对集合中的元素进行排序、获取指定范围内分数的操作
+
+### 26
+
+增加元素
+
+?> ZADD key score member [score member...]
+
+ZADD命令用于向有序集合中加入一个元素和该元素的分数，如果该元素已经存在，则用新分数替换原有分数
+
+ZADD命令返回值是新加入集合中的元素个数
+
+```bash
+127.0.0.1:6379[1]> ZADD sb 89 tom 67 peter 100 ayuliao
+(integer) 3
+127.0.0.1:6379[1]> zadd sb 150 ayuliao
+(integer) 0
+127.0.0.1:6379[1]> zadd sb 1.5 tom
+(integer) 0
+```
+
+ZADD可以加入浮点数
+
++inf：无穷大
+-inf：无穷小
+
+获取排名在某个范围的元素列表
+
+?> ZRANGE key start stop [WITHSCORES]
+?> ZREVRANGE key start stop [WITHSCORES]
 
 
+ZRANGE命令会按照元素分数从小到大的顺序返回索引从start到stop之间所有元素
 
+ZRANGE命令与LRANGE命令非常相似，索引都是从0开始，负数代表从后向前查找
 
+```bash
+127.0.0.1:6379[1]> ZRANGE sb 0 2
+1) "tom"
+2) "peter"
+3) "ayuliao"
+```
 
+获得所有元素
 
+```bash
+127.0.0.1:6379[1]> ZRANGE sb 0 -1
+1) "tom"
+2) "peter"
+3) "ayuliao"
+```
 
+如果ZRANGE命令加上WITHSCORES参数，返回的数据格式就会从 "元素1，元素2...，元素n" ，变为 "元素1，分数1，元素2，分数2...，元素n，分数n
 
+如果两个元素的分数相同，Redis就会按照 0<9<A<Z<a<z 顺序来排列
 
+获取指定分数范围的元素
 
+?> ZRANGEBYSCORE key min max [WITHSCORED] [LIMIT offset count]
 
+ZRANGEBYSCORE命令会将元素从小到大的顺序返回分数在min和max之间的元素
 
+```bash
+127.0.0.1:6379[1]> ZRANGEBYSCORE sb 70 150
+1) "ayuliao"
+```
 
+如果希望分数范围不包含端点值，可以在分数前加上 "("符合
 
+```bash
+127.0.0.1:6379[1]> ZRANGEBYSCORE sb 70 (150
+(empty list or set)
+```
 
+min和max还支持无穷小和无穷大
 
+```bash
+127.0.0.1:6379[1]> ZRANGEBYSCORE sb -inf +inf
+1) "tom"
+2) "peter"
+3) "ayuliao"
+```
 
+WITHSCORES参数用法与ZRANGE命令一样
 
+```bash
+127.0.0.1:6379[1]> ZRANGEBYSCORE sb 80 100 WITHSCORES
+1) "tom"
+2) "89"
+3) "ayuliao"
+4) "100"
+```
 
+Redis中的LIMIT跟MySQL中的LIMIT效果用法都类似
 
+```bash
+127.0.0.1:6379[1]> ZRANGEBYSCORE sb 80 +inf LIMIT 1 3
+1) "ayuliao"
+```
 
+ZREVRANGEBYSCORE命令不仅是按照元素分数从大王小的顺序给出结果的，而且它的min和max参数的顺序和ZRANGERBYSCORE命令相反
 
+增加某个元素的分数
 
+?>ZINCRBY key increment member
 
+ZINCRBY命令可以增加一个元素的分数，返回值是更改后的分数
 
+```bash
+127.0.0.1:6379[1]> ZINCRBY sb 100 ayuliao
+"200"
+127.0.0.1:6379[1]> ZINCRBY sb -100 ayuliao
+"100"
+```
 
+如果ZINCRBY命令指定的元素不存在，Redis在执行命令前后先建立它并将它分数赋值为0在执行操作
 
+### 27
+
+获得集合中元素的数量
+
+?> ZCARD key
+
+```bash
+127.0.0.1:6379[1]> ZCARD sb
+(integer) 3
+```
+
+获得指定分数范围内的元素个数
+
+?>ZCOUNT key min max
+
+```bash
+127.0.0.1:6379[1]> ZCOUNT sb 80 100
+(integer) 2
+```
+
+删除一个或多个元素
+
+?>ZREM key member
+
+```bash
+127.0.0.1:6379[1]> ZREM sb tom peter
+(integer) 2
+127.0.0.1:6379[1]> ZCARD sb
+(integer) 1
+```
+
+按照排名范围删除元素
+
+?>ZREMRANGEBYRANK key start stop
+
+```bash
+127.0.0.1:6379[1]> ZADD sb 80 test1 30 test2 40 test3 50 test4
+(integer) 4
+127.0.0.1:6379[1]> ZREMRANGEBYRANK sb 0 2
+(integer) 3
+127.0.0.1:6379[1]> ZRANGE sb 0 -1
+1) "test1"
+2) "ayuliao"
+127.0.0.1:6
+```
+
+按分数范围删除元素
+
+?>ZREMRANGEBYSCORE key min max
+
+```bash
+127.0.0.1:6379[1]> ZADD sb 80 test1 30 test2 40 test3 50 test4
+(integer) 3
+127.0.0.1:6379[1]> ZREMRANGEBYSCORE sb (30 80
+(integer) 3
+127.0.0.1:6379[1]> ZRANGE sb 0 -1
+1) "test2"
+2) "ayuliao"
+```
+
+获得元素的排名
+
+?>ZRANK key member
+
+0开始，从小到大排序
+
+```bash
+127.0.0.1:6379[1]> ZRANK sb ayuliao
+(integer) 1
+```
+
+?>ZREVRANK key member
+
+0开始，从大到小排序，分数最大的元素排名为0
+
+```bash
+127.0.0.1:6379[1]> ZREVRANK sb ayuliao
+(integer) 0
+```
+
+计算有序集合的交集
 
 
