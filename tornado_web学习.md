@@ -497,5 +497,250 @@ class MainHalder(tornado.web.RequestHandler):
 
 只有当随后的on_response()中的finish()函数被调用时，Tornado才知道本次处理已完成，可以发送给Response给客户端
 
-异步
+异步编程提供服务器的并发能力，但在编程方法上交同步显得更加繁琐
+
+协程化
+
+```python
+import tornado.web
+import tornado.httpclient
+
+class MainHandler(tornado.web.RequestHandler):
+    @tornado.gen.coroutine
+    def get(self):
+        http = tornado.httpclient.AsyncHTTPClient()
+        response = yield http.fetch('http:hackpython.com')
+        self.write(response.body)
+```
+
++ `@tornado.gen.coroutine`装饰MainHandler的get()、post()等处理函数
++ 异步对象处理耗时处理，如AsyncHTTPClient
++ 调用yield关键字获取异步对象的处理结果
+
+### 16
+
+Tornado框架本身较其他python web框架集成了最为丰富的用户身份验证功能，使用该框架，可以快速开发出强大安全的用户身份认证机制。
+
+Cookie是很多网站辨别用户身份而存储在本地终端（client side）的数据，定义RFC2019.
+
+在Tornado中使用RequestHandler.get_cookie()、RequestHandler.set_cookie()可以方便对Cookie进行读写。
+
+```python
+import tornado.web
+
+session_id = 1
+
+class MainHandler(tornado.web.RequestHandler):
+    def get(self):
+        global session_id
+        if not self.get_cookie('session'):
+            self.set_cookie('session', str(session_id))
+            session_id = session_id + 1
+            self.write("get a new session")
+        else:
+            self.write('session was set')
+```
+
+实际应用中，Cookie经常像这样保存于Session信息中
+
+因为Cookie总是被保存到客户端，保证cookie不被篡改是服务器程序要解决的问题。
+
+Tornado提供了Cookie信息加密机制，使得客户端无法随意解析和修改Cookie的键值。
+
+使用安全cookie的网站实例
+
+```python
+import tornado.web
+import tornado.ioloop
+
+session_id = 1
+
+class MainHandler(tornado.web.RequestHandler):
+    def get(self):
+        global session_id
+        if not self.get_secure_cookie('session'):
+            self.set_secure_cookie('session', str(session_id))
+            session_id = session_id + 1
+            self.write('session got a new')
+        else:
+            self.write('session was set')
+
+application = tornado.web.Application([
+    (r'/', MainHandler),
+], cookie_secret= 'SECRET_DONT_LEAK')
+
+def main():
+    application.listen(8888)
+    tornado.ioloop.IOLoop.current().start()
+
+if __name__ == '__main__':
+    main()
+```
+
+tornado.web.Application对象初始化时传递了cookie_secret参数，该参数是一个字符串，用于保存本站Cookie加密时的密钥
+
+需要读取Cookie的地方，使用RequestHandler.get_secure_cookie替换RequestHandler.get_cookie调用
+
+需要写入Cookie的地方用的RequestHandler.set_secure_cookie替换原理的RequestHandler.set_cookie调用
+
+开发者无需担心Cookie的伪造问题
+
+?>cookie_secret参数是Cookie加密密钥，不可泄露
+
+### 17
+
+RequestHandler类中有current_user属性用于保存当前请求的用户名，默认是None，在get()、post()处理函数中可以随时读取该属性以获取当前的用户名
+
+`RequestHandler.current_user`只是一个只读属性，开发者需要重载RequestHandler.get_current_user()函数设置该属性
+
+下面实例实现用户身份控制
+
+```python
+ import tornado
+import tornado.web
+import tornado.ioloop
+import uuid ## UUID生成库
+
+
+dict_session = {} #所有登录的Session
+
+class BaseHandler(tornado.web.RequestHandler):#公共基类
+    def get_current_user(self): #写入current_user的函数
+        sesssion_id = self.get_secure_cookie('session_id')
+        return dict_session.get(sesssion_id)
+
+class MainHandler(BaseHandler):
+    @tornado.web.authenticated #需要省份认证才能访问的处理器
+    def get(self):
+        # 转义一个字符串使它在HTML 或XML 中有效.
+        name = tornado.escape.xhtml_escape()
+        self.write('Hello,'+name)
+
+class LoginHandler(BaseHandler):
+    def get(self):
+        self.write('''<!DOCTYPE html>
+                    <html lang="en">
+                    <head>
+                      <meta charset="UTF-8">
+                      <title>tornado test</title>
+                    </head>
+                    <body>
+                      <form action="">
+                        <input type="text" name="name">
+                        <input type="submit" value="login in"></form>
+                    </body>
+                    </html>''')
+
+    def post(self):
+        if len(self.get_argument('name')) < 3:
+            self.redirect('/login')
+            session_id = str(uuid.uuid4())
+            dict_session[session_id] = self.get_argument('name')
+            self.set_secure_cookie('session_id', session_id)
+            self.redirect('/')
+
+application = tornado.web.Application(
+    [   #URL映射定义
+        (r'/', MainHandler),
+        (r'/login', LoginHandler),
+    ],
+    cookie_secret = '123', #Cookie加密密钥
+    login_url='/login'#登录不成功，tornado.web.authenticated自动重定向到该URL上
+)
+
+def main():
+    application.listen(8888)
+    tornado.ioloop.IOLoop.current().start()
+
+if __name__ == '__main__':
+    main()
+```
+
++ 全局字典dict_sessons保存已登录用户信息
++ 定义公共基类 `BaseHandler`，该类继承自tornado.web.RequestHandler，**用于定义本网站的所有处理器的功能属性和行为，重载它的get_cureent_user()函数，在其开发者访问RequestHandler.current_user属性时自动被Tornado调用**，该函数首先用`self.get_secure_cookie`方法获得本次访问回答的ID，然后用绘画ID才能从dict_sessions中获得用户名并返回
++ MainHander类是一个要求经过用户身份认证才能访问的处理器实例，get()方法使用了装饰器 `tornado.web.authenticated`，具有该装饰器的处理函数**在执行前更加current_user是否已经被赋值来判断用户的身份情况，如果已经被赋值，则可以进行正常逻辑，否则自动重定向到网站的登录页面
++ LoginHandler类是登录页面处理器，其get()喊用于渲染登录页面，post()函数用于验证是否允许用户登录
++ tornado.web.Application的初始化函数中通过**login_url参数给出网站的登录页面地址**，该地址被用于tornado.web.authenticated装饰器在发现用户尚未验证时重定向到一个URL
+
+?>加入身份认证的所有页面处理器需要继承自BaseHandler雷，而不是直接继承原理的tornado.web.RequestHandler类
+
+### 18
+
+CSRF或XSRF跨站请求伪造是一种对网站的恶意利用。通过CSRF，攻击者可以冒用用户的身份，在用户不知情的情况下执行恶意操作。
+
+CSRF攻击原理
+
++ 1.用户访问了存在CSRF漏洞的网站A，成功登录并获取到网站A的Cookie后，以后该用户对网站A的访问均会携带该Cookie，网站A通过该Cookie认证用户的身份
++ 2.此时用户又访问了网站B，网站B返回页面中带有一个访问网站A进行而已操作链接，但表面上伪装成合法内容，如:`<ahref="www.siteA.com/get_money?amount=5000$dest_card=xxxxx">贡献你获得了十万元大抽奖机会</a>`
++ 3.用户一旦点击恶意链接，就在不知情的情况下向网站A站点发送了请求并携带了网站A的cookie作为身份认证，网站A受到用户的请求和附带的Cookie时会任务该请求是用户发出的正常请求，就执行请求对应的操作，此时网站B就完成了CSRF恶意攻击的目的
+
+
+Tornado为了防范CSRF攻击，要求每个请求包括一个参数作为令牌来匹配存储在Cookie中对应值。Tornado可以通过一个Cookie头和一个隐藏的HTML表单元素向页面提供令牌。这样合法页面表单提交时，就好将表单值和已存储的Cookie都传递给Tornado，如果两者匹配，则认为请求有效
+
+开启Tornado的CSRF防范功能需要两个步骤
+
+1.实例化tornado.web.Application是传入 xsrf_cookies=True参数
+
+```python
+application = tornado.web.Application([
+    (r'/', MainHandler),
+    (r'/login', LoginHandler),
+], cookie_secret="123", xsrf_cookies=True,)
+```
+
+或者
+
+```python
+settings = {
+    "cookie_secret":"123",
+    "xsrf_cookies":True
+}
+
+applications = tornado.web.Application([
+    (r'/', MainHandler),
+    (r'/login', LoginHandler),
+], **settings)
+```
+
+?>当tornado.web.Application需要初始化的参数过多时，可以使用第二种方式
+
+2.在每个具有HTML表单的模板文件中，为所有表单添加xsrf_from_html()函数标签，如：
+
+```html
+<form action="/login" method="post">
+  {% module xsrf_form_html() %}
+  <input type="text" name="name">
+  <input type="submit" value="post">
+</form>
+```
+
+`{% module xsrf_form_html() %}`为表单添加了隐藏元素，以防止跨站攻击
+
+### 19
+
+Tornado异步特性让它非常适合服务器高并发处理，客户端与服务器的持久链接应该框架就是高并发的典型应用。
+
+WebSocket正是HTTP客户端与服务器之间建立持久连接的HTML5标准技术
+
+WebSocket protocol是HTML5定义的标准协议 RFC6455，实现了浏览器与服务器的全双工通信
+
+WebSocket与普通Socket通信类似，打破了原来的HTTP的Request和Response一对一通信模型，**同时打破了服务器只能被动接受客户端请求的应用场景**
+
+传统的HTTP+HTML方案只适用于客户端主动发出请求的场景，而无法满足服务器端发起的通信要求。
+
+WebSocket正是为了解决传统HTTP遇到的问题，相对于普通的Socket通信，WebSocket在应用层定义了基本的交互流程，是的Tornado服务器框架和JavaScript客户端可以构建出标准的WebSocket模块
+
+WebSocket特定如下：
+
++ WebSocket适合服务器**主动**推送的场景
++ 相对于Ajax和Long poll，WebSocket通信模型更高效
++ WebSocket仍然与HTTP完成Internet通信
++ WebSocket是HTML5标准协议，不受企业防火墙拦截
+
+### 20
+
+WebSocke通信原理是在**客户端与服务器之间建立TCP持久链接，使得当前服务器有消息需要推送给客户端时能够进行即时通信**
+
+**WebSocket不是HTTP，但由于在Internet上的HTML本身有HTTP封装进行创世的，所以WebSocket仍然需要与HTTP进行协作，IETF在RFC6455中定义了基于HTTP链路建立WebSocket**
+
 
