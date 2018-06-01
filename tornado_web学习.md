@@ -744,3 +744,65 @@ WebSocke通信原理是在**客户端与服务器之间建立TCP持久链接，�
 **WebSocket不是HTTP，但由于在Internet上的HTML本身有HTTP封装进行创世的，所以WebSocket仍然需要与HTTP进行协作，IETF在RFC6455中定义了基于HTTP链路建立WebSocket**
 
 
+客户端通过发送如下HTTP Request告诉服务器要建立一个WebSocket长连接：
+
+```bash
+GET /hackpython/?encoding=text HTTP/1.1
+Host: echo.websocket.org
+Origin: http://websocket.org
+Cookie: __token=ubcxx13
+Connection: Upgrade
+Sec-WebSocket-Key: uAyuLiao/umbTt5uKmw==
+Upgrade: websocket
+Sec-WebSocket-Version: 13
+```
+
+它仍然是一个HTTP Request包，其中内容也非常眼熟
+
++ HTTP请求谓词：GET
++ 请求地址：/hackpython
++ HTTP版本号：1.1
++ 服务器主机域名：echo.websocket.org
++ Cookie信息：__token = ubxx13
+
+但也出现了4个特殊字段，它们是
+
+```bash
+Connection: Upgrade
+Sec-WebSocket-Key: uAyuLiao/umbTt5uKmw==
+Upgrade: websocket
+Sec-WebSpcket-version: 13
+```
+
+这就是Websocket建立链路的核心，它告诉Web服务器，客户端希望建立一个WebSocket链接，客户端使用的WebSocket版本是13，密钥是uAyuLiao/umbTt5uKmw==
+
+服务器在收到Request后，如果同意建立WebSopcket链接则返回类似如下的Response
+
+```bash
+HTTP/1.1 101 WebSocket Protocol Handshake
+Date: Fri, 10 Feb 2018 17:23:23 GMT
+Connetion: Upgrade
+Server: WebSocket
+Access-Control-Allow-Origin: http://websocket.org
+Access-Contorl-Allow-Credentials: true
+Sec-WebSocket-Accept: rHackPython/SKss1fega/SSeaeafl=
+Access-Control-Allow-Headers:content-type
+```
+
+服务器响应的依旧是一个HTTP Response，其中与WebSocket相关的Header信息是：
+
+```bash
+Connection: Upgrade
+Upgrade: WebSocket
+Sec-WebSocket-Accept: rHackPython/SKss1fega/SSeaeafl=
+```
+
+前面两条数据告诉客户端：服务器已经将本连接转换未WebSocket链接，而`Sec-WebSocket-Accept`是将客户端发送的`Sec-WebSocket-key`加密后产生的数据，以让客户端确认服务器能够正常运行。
+
+现在客户端与服务器之间已经建立了一个TCP持久长连接，双方已经可以随时向对方发送消息
+
+
+
+
+
+
