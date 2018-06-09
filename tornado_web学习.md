@@ -345,8 +345,8 @@ RequestHandler.request
 其中常用的对象属性
 
 
-|属性名|描述|
-|---|---|
+属性名|描述
+---|---
 method|HTTP请求方法，GET/POST
 uri|客户端请求的完整URL内容
 path|uri路径名
