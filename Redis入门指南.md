@@ -1171,4 +1171,275 @@ ZINCRBY命令可以增加一个元素的分数，返回值是更改后的分数
 
 计算有序集合的交集
 
+```bash
+ZINTERSTORE destination numkeys key [key...] [WEIGHTS weight [weight...]] [AGGREGATE SUM|MIN|MAX]
+```
+
+ZINTERSTORE命令用来计算多个有序集合的交集并将结果存储在destination键中（同样以有序集合类型存储），返回值为destination键中的元素个数
+
+destination键中元素的分数是由AGGREGATE参数决定的
+
+1.当AGGREGATE是SUM时（默认就是SUM），destination键中元素的分数是每个参与计算的集合中该元素分数的**和**
+
+```bash
+127.0.0.1:6379[1]> zadd sortedsets1 1 a 2 b
+(integer) 2
+127.0.0.1:6379[1]> zadd sortedsets2 10 a 20 b
+(integer) 2
+127.0.0.1:6379[1]> ZINTERSTORE sortedsetsresult 2 sortedsets sortedsets2
+(integer) 0
+127.0.0.1:6379[1]> ZINTERSTORE sortedsetsresult 2 sortedsets1 sortedsets2
+(integer) 2
+127.0.0.1:6379[1]> ZRANGE sortedsetsresult 0 -1 withscores
+1) "a"
+2) "11"
+3) "b"
+4) "22"
+```
+
+2.当AGGREGATE时MIN时，destination键中元素的分时是每个参与计算的集合中该元素分数的**最小值**
+
+```bash
+127.0.0.1:6379[1]> ZINTERSTORE sortedsetsresult 2 sortedsets1 sortedsets2 aggregate min
+(integer) 2
+127.0.0.1:6379[1]> zrange sortedsetsresult 0 -1 withscores
+1) "a"
+2) "1"
+3) "b"
+4) "2"
+```
+
+3.当AGGREGATE是MAX时，destination键中元素的分数是每个参与计算的集合中该元素的最大值
+
+```bash
+127.0.0.1:6379[1]> ZINTERSTORE sortedsetsresult 2 sortedsets1 sortedsets2 aggregate max
+(integer) 2
+127.0.0.1:6379[1]> zrange sortedsetsresult 0 -1 withscores
+1) "a"
+2) "10"
+3) "b"
+4) "20"
+```
+
+ZINTERSTORE命令还没通过WEIGHTS参数设置每个集合的权重，每个集合在参与计算时元素的分数会被乘上该集合的权重
+
+```
+127.0.0.1:6379[1]> ZINTERSTORE s 2 sortedsets1 sortedsets2 weights 1 0.1
+(integer) 2
+127.0.0.1:6379[1]> zrange s 0 -1 withscores
+1) "a"
+2) "2"
+3) "b"
+4) "4"
+```
+
+这里sortedsets2的权重被设为 0.1 ，所以sortedsets1和sortedsets2中元素相加等于 2和4
+
+## 进阶
+
+### 1
+
+**Redis中事务是一组命令的集合。事务同命令一样都是Redis中最小执行单位，一个事务中的命令要么都执行，要么都不执行**
+
+事务的应用非常普遍，其原理是先将属于一个事务的命令发送给Redis，然后再让Redis依次执行这些命令
+
+如：
+
+```bash
+127.0.0.1:6379[6]> MULTI
+OK
+127.0.0.1:6379[6]> SADD 'user:1:following' 2
+QUEUED
+127.0.0.1:6379[6]> SADD 'user:2:following' 1
+QUEUED
+127.0.0.1:6379[6]> EXEC
+1) (integer) 1
+2) (integer) 1
+```
+
+上面的命令就是一个简单事务，作用是让id为1和2的用户相互关注
+
+首先使用了MULTI命令告诉Redis，下面的命令将作为同一个事务，等会一起执行，Redis接收到命令返回`QUEUED`表示命令进入等待执行的**事务队列中**
+
+当把所有要在同一个事务中执行的命令都发给Redis后，再使用EXEC命令告诉Redis将事务队列中等待执行的命令（即刚刚加入QUEUED的命令）按照发送顺序依次执行，EXEC命令的返回值就是这些命令返回值组成的列表，返回值顺序和命令的顺序相同。
+
+**Redis保证一个事务中的所有命令要me都执行，要么都不执行**
+
+如果在发送EXEC命令前客户端短信，Redis会**清空事务队列**，事务中所有命令都不执行，一旦客户端发送了EXEC命令，所有命令就会被执行，就算此后客户端断线了也没关系，因为Redis Server中已经记录了所有要执行的命令了
+
+Redis事务可以保证一个事务内部的命令依次执行而不被其他命令插入。避免客户端A执行几条命令，执行了一部分，被客户端B发来一条命令，执行了客户端B的命令在回来执行客户端A的命令
+
+### 2
+
+如果事务中一个命令报错，如何处理
+
+1.语法错误，如指令不存在，或命令参数错误
+
+```bash
+127.0.0.1:6379[6]> MULTI
+OK
+127.0.0.1:6379[6]> set key 1
+QUEUED
+127.0.0.1:6379[6]> set key
+(error) ERR wrong number of arguments for 'set' command
+127.0.0.1:6379[6]> ayuliao key
+(error) ERR unknown command 'ayuliao'
+127.0.0.1:6379[6]> exec
+(error) EXECABORT Transaction discarded because of previous errors.
+```
+
+从上面示例中可以看出，一个正确命令，返回QUEUED，表明加入了事务列表，其余命令都有错误，一个是参数不足，一个是没有ayuliao这个命令。
+
+**只要有一个语法错误，Redis执行事务时就会直接返回错误信息，连正确语法也不会执行**
+
+?>Redis 2.6.5 之前的版本会忽悠语法错误命令，然后执行事务中其他语法正确的命令
+
+2.运行错误，如散列类型命令操作集合类型的键，这种错误在实际执行前Redis是无法发现的
+
+```bash
+127.0.0.1:6379[6]> MULTI
+OK
+127.0.0.1:6379[6]> set key 1
+QUEUED
+127.0.0.1:6379[6]> sadd key 2
+QUEUED
+127.0.0.1:6379[6]> set key 3
+QUEUED
+127.0.0.1:6379[6]> EXEC
+1) OK
+2) (error) WRONGTYPE Operation against a key holding the wrong kind of value
+3) OK
+```
+
+从执行结果可以看出，虽然命令 `sadd key 2`错误了，但事务中其他正确的命令都被正常执行。
+
+**Redis的事务没有关系数据库事务中提供的回滚功能，也就是出错了，Redis不会自动回滚，只能我们自己处理残局**
+
+因为Redis不支持回滚功能，这也使得Redis在事务上保持简洁和快速
+
+### 3
+
+一个事务只有当所有命令都依次执行完后才能得到每个结果的返回值，看在某些情况，需要先获得某条命令的返回值，再根据这个返回值判断是否需要执行下一条命令。
+
+前面提过，要使用SET和GET方法来实现INCR命令的效果，会出现竞态条件，为了避免这种情况，自然想到了事务，但**事务无法将前一条命令的结果作为吓一跳命令的参数，即在执行SET命令时无法获得GET命令的返回值，也就无法通过SET和GET做到INCR的功能**
+
+可以使用WATCH命令来解决这个问题，**WATCH命令可以监控一个或多个键，一旦其中一个键被修改或删除，之后的事务就不会执行。** 监控一直持续到EXEC命令，**事务中的命令是在EXEC之后才执行的，所以MULTI命令可以修改WATCH命令监控的键值**
+
+```bash
+127.0.0.1:6379[6]> set key 1
+OK
+127.0.0.1:6379[6]> watch key #监控key
+OK
+127.0.0.1:6379[6]> set key 2 #key被修改，事务不执行
+OK
+127.0.0.1:6379[6]> MULTI
+OK
+127.0.0.1:6379[6]> set key 3
+QUEUED
+127.0.0.1:6379[6]> EXEC
+(nil) #事务不执行
+127.0.0.1:6379[6]> get key
+"2"
+```
+
+上面的命令中，执行了WATCH命令后，因为事务执行前修改了key的值，所以最后的事务不会执行，EXEC命令返回空结果
+
+学会WATCH命令就可以通过事务来实现incr函数了，伪代码
+
+```python
+def incr(key):
+    WATCH key #如果key在执行时修改了，后面的事务就不会执行
+    value = GET key
+    if not value:
+        value=0
+    value = value + 1
+    MULTI
+    SET key,value:
+        result = EXEC
+    return result[0] #EXEC返回多行字符串类型，所有使用result[0]来获得其中的值
+```
+
+WATCH命令的作用当被监控的键值被修改后阻止之后一个事务的执行，而**不能保证其他客户端不修改这一键值**，所以我们**需要在EXEC执行失败后重新执行整个函数**
+
+执行EXEC命令后，会取消对所有键的监控，如果不想执行事务中的命令可以使用UNWATCH命令来取消监控。
+
+### 4
+
+在关系数据库中一般需要额外的一个字段来记录到期时间，然后定期检测删除过期数据。而Redis中可以使用EXPIRE命令设置一个键的过期时间，到时间后Redis会删除它。
+
+```bash
+EXPIRE key seconds
+```
+
+seconds表示键的过期时间，单位是秒
+
+```
+127.0.0.1:6379[6]> set name ayuliao
+OK
+127.0.0.1:6379[6]> EXPIRE name 900 #900秒后，name键会被自动删除
+(integer) 1
+127.0.0.1:6379[6]> get name
+"ayuliao"
+```
+
+如果想知道一个键还有多久才被删除可以使用TTL命令，返回的是键的剩余时间，单位是秒
+
+```bash
+127.0.0.1:6379[6]> TTL name
+(integer) 811
+```
+
+811秒后，name会被删除
+
+如果没有为键设置过期时间，即永久存在，这是建立一个键的默认情况，TTL命令会返回-1
+
+```bash
+127.0.0.1:6379[6]> set newname ayuliao
+OK
+127.0.0.1:6379[6]> TTL newname
+(integer) -1
+```
+
+当键不存在时，TTL会返回-2
+
+```bash
+127.0.0.1:6379[6]> TTL awef
+(integer) -2
+```
+
+?>Redis 2.6版本汇总，无论键不存在还是键没有过期时间都会返回01，直到2.8版本才分返回-2和-1两种情况
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
