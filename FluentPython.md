@@ -598,7 +598,452 @@ sorted和list.sort背后的排序算法都是Timbot，Timbot是一种自适应�
 
 Timbot算法是很高效的算法，因为来自真实世界的数据通常都是有一定顺序特点的
 
-## 字段和集合
+
+
+
+
+## 字典和集合
 
 ### 1
+
+dict类型是python语言中的基石，模块命名空间、实例的属性和函数的关键字参数中都可以看到字典的身影。
+
+与dict有关的内置喊都在 `__builtins__.__dict__`模块中
+
+因为字典非常重要，python对它做了高度优化，**散列表则是字典类型性能出众的根本原因**
+
+集合(set)的实现也依赖于散列表
+
+### 2
+
+`collections.abc`模块中有Mapping和mutableMapping这个两个抽象基类，作用就是为dict何其他类似的类型定义形式接口
+
+非抽象映射类型一般不会直接继承这些抽象基类，直接对dict或collections.User.Dict进行扩展，这些抽象基类主要作用是作为形式化的文档，定义了构建一个映射类型所需要的最基本的接口。它们还可以跟isinstance一起用来判断某个数据是不是广义上的映射类型。
+
+```python
+In [5]: from collections import abc
+
+In [6]: d = {}
+
+In [7]: isinstance(d, abc.Mapping)
+Out[7]: True
+```
+
+### 3
+python标准库里的所有映射类型都是利用dict来实现的，因此它们都有个共同的限制，即**只有可散列的数据类型**才能用作这些映射力的键，只有键有这个要求，值并不需要是可散列的数据类型。
+
+?>可散列：如果一个对象是可散列的，那么这个对象的生命周期中，**它的散列值是不变的**，而且这个对象需要使用`__hash__()`方法。另外可散列还要有`__qe__()`方法，这样才能更其他键做比较，如果两个可散列对象是相等的，那么它们的散列值一定是一样的
+
+**原子不可变的数据类型（如：str、buytes和数值类型）都是可散列类型**，frozenset也是可散列的，根据frozenset定义，frozenset力只能容纳可散列类型。
+
+对于元组而言，只有当元组包含的所有元素都是可散列类型的情况下，它才是可散列的
+
+```python
+In [9]: t = (1,2,(3,4))
+
+In [10]: hash(t)
+Out[10]: -2725224101759650258
+
+In [11]: t1 = (1,2,[3,4]) #元组中引用了可变变量list，那么就无法进行散列了
+
+In [12]: hash(t1)
+---------------------------------------------------------------------------
+TypeError                                 Traceback (most recent call last)
+<ipython-input-12-4375c565e98a> in <module>()
+----> 1 hash(t1)
+
+TypeError: unhashable type: 'list'
+
+In [13]: tf = (1,2,frozenset([30,40]))
+
+In [14]: hash(tf)
+Out[14]: -4118419923444501110
+```
+
+### 4
+一般而言，用户自定义的类型的对象都是可散列的，散列值就是它们的id()函数的返回值，所以所有这些对象在比较的时候都是不相等的。（散列值不同）
+
+如果一个对象实现了`__eq__`方法，并且在方法中用到了这些对象的内部状态，那么只有当所有这些内部状态都是不可变的情况下，这个对象才是可散列的。
+
+字典提供了多种定义方式
+
+```python
+In [24]: a = dict(a=1,b=2)
+
+In [25]: b = {'a':1,'b':2}
+
+In [26]: c = dict(zip(['a','b'],[1,2]))
+
+In [27]: d = dict([('a',1),('b',2)])
+
+In [28]: e = dict({'a':1,'b':2})
+
+In [29]: a == b == c == d == e
+Out[29]: True
+```
+
+### 5
+
+字典推到可以从任何以键值对作为元素的可迭代对象中构建出字典
+
+```python
+In [30]: m = [('a',1),('b',2)]
+
+In [31]: dict(m)
+Out[31]: {'a': 1, 'b': 2}
+
+In [32]: c = {k:v for k,v in m} #字典推到式
+
+In [33]: c
+Out[33]: {'a': 1, 'b': 2}
+```
+
+### 6
+
+```
+d.update(m, [**kwargs])
+```
+
+update方法处理参数m的方式，是典型的**鸭子类型**，函数首先先检查m是否有keys方法，如果有，那么update函数就把它当作映射对象来处理，否则，函数把m当作包含了键值对（key,value)元素的迭代器
+
+python中大多数映射类型的构造方法都采用了类型的逻辑，因此你可以用一个映射对象来新建一个映射对象，也可以用包含（key,value)元素的可迭代对象来初始化一个映射对象。
+
+### 7
+
+当字典`d[k]`找不到正确的键时，python就会报错，Python信奉“快速失败”哲学。
+
+可能大家都知道使用`d.get(k,default)`来代替`d[k]`，给找不到的键一个默认的返回值，但要**更新某个键对应的值的时候**，不管使用`__getitem__`还是`get`都会不自然，而且效率低。`dict.get`并不是处理找不到的键的最好方法。
+
+使用<!-- more -->方法最佳
+
+```python
+my_dict.setdefault(key, []).append(new_value)
+```
+
+等价于
+
+```python
+if key not in mydict:
+    mydict[key] = []
+mydict[key].append(new_value)
+```
+
+`mydict[key].append(new_value)`这句代码，将新的内容放回到字典中，牵扯到了一次查询，所以第二种写法效率明显没有第一种高
+
+两者效果一样，只是后者至少要进行两次键查询，如果键不存在，就是进行三次查询，使用setdefault只需要一次就可以完成整个操作了
+
+直观的体会一下，下面编写一段 从索引中获取单词出现的频率信息，并把他们写进对应的列表里
+
+```python
+import sys
+import re
+
+WORD_RE = re.compile(r'\w+')
+
+index = {}
+
+with open(sys.argv[1], encoding='utf-8') as fp:
+    for line_no, line in enumerate(fp, 1):
+        for match in WORD_RE.finditer(line):
+            word = match.group()
+            column_no = match.start() + 1
+            # 这种实现方法不好
+            location = (line_no, column_no) 
+            occ = index.get(word, []) #1
+            occ.append(location) #2
+            index[word] = occ #3
+            
+for word in sorted(index, key=str.upper): #4
+    print(word, index[word])
+```
+
++ 1.提取word出现的情况，如果没有记录，就返回[]
++ 2.把新单词出现位置添加到列表后面
++ 3.把新的列表放回字典中，**牵扯了一次查询操作**，先找到在哪里，才能更新
++ **4.sorted函数的`key=`参数没有调用`str.upper`，而是把这个方法的引用传递给了sorted函数，这样的排序的时候，单词就好被规范成统一的格式**
+
+使用`setdefault`来改进一下
+
+```python
+with open(sys.argv[1], encoding='utf-8') as fp:
+    for line_no, line in enumerate(fp, 1):
+        for match in WORD_RE.finditer(line):
+            word = match.group()
+            column_no = match.start() + 1
+            # 这种实现方法不好
+            location = (line_no, column_no)
+            # occ = index.get(word, [])
+            # occ.append(location)
+            # index[word] = occ
+            index.setdefault(word,[]).append(location) #1
+```
+
++ 1.先获取word这个key下的value，也就是获取单纯出现情况列表，如果单词不存在，就把单词和一个空列表放入映射
+
+
+
+
+
+
+
+
+
+
+
+
+
+## 函数装饰器和闭包
+
+### 1
+函数装饰器用于在源码中“标记”函数，以某种方式增强函数的行为，想要掌握装饰器，必须先理解闭包
+
+nonlocal是新出现的保留关键字，在python3.0引入，如果自己想实现函数装饰器，就必须了解闭包，因此也需要知道nonlocal
+
+### 2
+装饰器是可调用的对象，其参数是另一个函数，python支持类装饰器。装饰器可能会处理被装饰的函数，然后把它返回，或将其替换成另一个函数或可调用对象
+
+简单例子理解上面这句话
+
+```python
+In [1]: def deco(func):
+   ...:     def func2():
+   ...:         print('Hello world')
+   ...:     return func2
+   ...:
+   ...: @deco
+   ...: def func1():
+   ...:     print('Hello ayuliao')
+   ...:
+
+In [2]: func1()
+Hello world
+
+In [3]: func1
+Out[3]: <function __main__.deco.<locals>.func2>
+```
+
+func1函数使用了deco装饰器，看到Out[3]，可以发现func1函数其实被装饰器中的func2函数函数替换了
+
+装饰器的一大特性就是被装饰的函数替换成其他函数，第二大特性就是装饰器在加载模块时立即执行
+
+### 3
+
+装饰器一个关键特性是，它们在被装饰的函数定义之后立即执行，比如import导入时
+
+```python
+funclist = []
+
+def reg(func):
+    print('running func is (%s)'%func)
+    funclist.append(func)
+    func()
+    return func
+
+@reg
+def f1():
+    print('running f1()')
+    
+@reg
+def f2():
+    print('running f2()')
+    
+def f3():
+    print('running f3()')
+    
+def main():
+    print('running main()')
+    print('reg --> ', reg)
+    f1()
+    print(f1)
+    f2()
+    print(f2)
+    f3()
+    
+if __name__ == '__main__':
+    main()
+```
+
+在代码中，f1和f2方法使用了reg装饰器进行装饰，f3没有，运行结果如下
+
+```bash
+running func is (<function f1 at 0x10b8f69d8>)
+running f1()
+running func is (<function f2 at 0x10b8f6a60>)
+running f2()
+running main()
+reg -->  <function reg at 0x10b8f6158>
+running f1()
+<function f1 at 0x10b8f69d8>
+running f2()
+<function f2 at 0x10b8f6a60>
+running f3()
+```
+
+从输出结果可以看出，装饰器在f1和f2方法调用前就运行了，运行了两次，调用reg时，传给它的参数是被装饰的函数f1和f2，而f3函数只有在main中才被调用执行
+
+这里想强调的是，**函数装饰器在导入模块时立即执行，而被装饰的函数只在明确调用时运行**
+
+在上面的代码中，reg装饰器原封不动的返回被装饰的函数，这种做法并非一无是处，很多python web框架使用这一的装饰器吧函数添加到某种中央注册处，例如把url模式映射到HTTP相应的函数上的注册处
+
+一个实际的例子，超市折扣
+
+```
+promos = []
+
+def promotion(promo_func):
+    promos.append(promo_func)
+    return promo_func
+
+@promotion
+def fidelity(order):
+    #积分为1000以上的顾客提供5%折扣
+    return order.total() * 0.5 if order.customer.fidelity >= 1000 else 0
+
+@promotion
+def bulk_item(order):
+    #单个商品为20个或以上提供10%的折扣
+    discount = 0
+    for item in order.cart:
+        if item.quantity >= 20:
+            discount += item.total() * .1
+    return discount
+
+@promotion
+def large_order(order):
+    #订单汇总不同的商品达到10个或以上提供7%的折扣
+    distinct_items = {item.product for item in order.cart}
+    if len(distinct_items) >= 10:
+        return order.total() * .07
+    return 0
+
+def best_promo(order):
+    return max(promo(order) for promo in promos)
+```
+
+这样写有几个好处
+
+1.促销策略函数无需使用特殊名称，如以_promo结尾
+2.@promotion装饰器突出被装饰函数的作用，想临时禁用某个促销策略时，只需吧装饰器注释掉
+
+但是，大多数装饰器会修被装饰的函数，通常的做法是定义一个内部函数，然后将其返回，替换被装饰的函数，**使用内部函数的代码几乎都要靠闭包才能正确运作**
+
+要深入了解装饰器，就必须要理解闭包
+
+### 4
+
+变量作用域规则
+
+```python
+In [7]: def f1(a):
+   ...:     print(a)
+   ...:     print(b)
+   ...:
+
+In [8]: f1(6)
+6
+---------------------------------------------------------------------------
+NameError                                 Traceback (most recent call last)
+<ipython-input-8-3ae6fc5ed790> in <module>()
+----> 1 f1(6)
+
+<ipython-input-7-8c139ea215ce> in f1(a)
+      1 def f1(a):
+      2     print(a)
+----> 3     print(b)
+      4
+
+NameError: name 'b' is not defined
+```
+
+函数中，a为局部变量，b为全局变量，全局变量b没有赋值，报错正常
+
+为变量b先赋值，修改一下f1方法，代码如下
+
+```python
+In [9]: b = 6
+   ...: def f2(a):
+   ...:     print(a)
+   ...:     print(b)
+   ...:     b = 9
+   ...: f2(3)
+   ...:
+3
+---------------------------------------------------------------------------
+UnboundLocalError                         Traceback (most recent call last)
+<ipython-input-9-fde9fff01553> in <module>()
+      4     print(b)
+      5     b = 9
+----> 6 f2(3)
+
+<ipython-input-9-fde9fff01553> in f2(a)
+      2 def f2(a):
+      3     print(a)
+----> 4     print(b)
+      5     b = 9
+      6 f2(3)
+
+UnboundLocalError: local variable 'b' referenced before assignment
+
+```
+
+报出局部变量b在赋值之前引用，原因是，变量b在f2函数定义体中赋值了，所以python编译器会认为变量b是局部变量，而不是全局变量，这不算缺陷，而是设计选择
+
+如果在函数定义体中重新赋值了变量，想让该变量继续保持全局变量的身份，使用global关键字则可
+
+```python
+In [10]: b = 6
+    ...: def f2(a):
+    ...:     global b
+    ...:     print(a)
+    ...:     print(b)
+    ...:     b = 9
+    ...: f2(3)
+    ...:
+3
+6
+```
+
+### 5
+
+闭包指延伸了作用域的函数，其中包含函数定义体中引用，但是不在定义体中定义的非全局变量。函数是不是匿名没有关系，**关键是跟它能访问定义体之外的非全局变量**
+
+从具体的实例如手：
+
+```python
+In [12]: def make_averager():
+    ...:     series = []
+    ...:
+    ...:     def averager(new_value):
+    ...:         series.append(new_value)
+    ...:         total = sum(series)
+    ...:         return total/len(series)
+    ...:     return averager
+    ...:
+
+In [13]: avg = make_averager()
+
+In [14]: avg(10)
+Out[14]: 10.0
+
+In [15]: avg(11)
+Out[15]: 10.5
+
+In [16]: avg(12)
+Out[16]: 11.0
+```
+
+上面代码定义了make_averager方法，series是其中的局部变量
+
+调用avg(10)是，make_averager函数已经返回了，而它的本地作用域也会被释放，那么series作为函数作用域中的局部变量，其中的值也会随之函数作用域的释放而被释放，但从avg(11)和avg(12)调用的结果来看，series变量中的值没有被释放，反而一直存着。
+
+
+
+
+
+
+
+
+
+
+
 

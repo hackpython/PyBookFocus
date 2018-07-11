@@ -8,6 +8,8 @@
   <meta name="description" content="Description">
   <meta name="viewport" content="width=device-width, user-scalable=no, initial-scale=1.0, maximum-scale=1.0, minimum-scale=1.0">
   <link rel="stylesheet" href="//unpkg.com/docsify/lib/themes/vue.css">
+   <link rel="stylesheet" href="//unpkg.com/katex/dist/katex.min.css">
+  <script src="//unpkg.com/katex/dist/katex.min.js"></script>
 </head>
 <body>
   <div id="app"></div>
@@ -25,6 +27,11 @@
             'https://github.com/hackpython/PyBookFocus/blob/master/'
           ),
         function (hook) {
+          hook.beforeEach(function (content) {
+          return content.replace(/\$\$([\s\S]*?)\$\$/g, function (m, code) {
+            return katex.renderToString(code)
+          })
+        })
           var footer = [
             '<hr/>',
             '<footer>',

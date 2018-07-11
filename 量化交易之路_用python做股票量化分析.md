@@ -1174,24 +1174,1086 @@ do_single_task run time is (48.553204597999866)
 
 没错，书中使用numba库编译后运行结果会更快，但在我这里，使用了time.perf_counter()进行计时后，串行运行反而更快
 
+?>在ipython中可以使用%time魔术方法来计算运行耗时
+
+### 22
+使用logging模块打印日志，优点就是可以指定每条打印语句的输出级别，logging级别如下：
+
++ debug 调试信息
++ info 输出信息
++ warning 警告信息
++ error 错误信息
++ critical 严重错误
+
+通过logging.basicConfig()统一设置运行环境日志的输出级别，只要大于或等于设置级别的日志才能打印输出，低于这个级别的被忽略
+
+### 23
+有时遇到问题，会比较棘手，此时可以使用**python调试工具pdb让程序单步运行，随时查看运行状态**
+
+```python
+import pdb
+
+def gen_buy_change_list():
+    buy_change_list =  []
+    for buy_change in range(-5,-16,-1):
+        if buy_change == -10:
+            #打断点，通过set_trace()
+            pdb.set_trace()
+
+        buy_change = buy_change/100
+        buy_change_list.append(buy_change)
+    raise RuntimeError('debug for pdb')
+    return buy_change_list
+
+try:
+    _ = gen_buy_change_list()
+except Exception:
+   # 从捕获异常的地方开始调试，是经常使用的调试技巧
+    pdb.set_trace()
+```
+
+pdb调试经常使用的
+
+```bash
+> /Users/ayuliao/Desktop/workplace/MathMind/test2.py(10)gen_buy_change_list()
+-> buy_change = buy_change/100
+(Pdb) l
+  5         for buy_change in range(-5,-16,-1):
+  6             if buy_change == -10:
+  7                 #打断点，通过set_trace()
+  8                 pdb.set_trace()
+  9     
+ 10  ->         buy_change = buy_change/100
+ 11             buy_change_list.append(buy_change)
+ 12         raise RuntimeError('debug for pdb')
+ 13         return buy_change_list
+ 14     
+ 15     try:
+(Pdb) n
+> /Users/ayuliao/Desktop/workplace/MathMind/test2.py(11)gen_buy_change_list()
+-> buy_change_list.append(buy_change)
+(Pdb) s
+> /Users/ayuliao/Desktop/workplace/MathMind/test2.py(5)gen_buy_change_list()
+-> for buy_change in range(-5,-16,-1):
+(Pdb) c
+--Return--
+> /Users/ayuliao/Desktop/workplace/MathMind/test2.py(16)<module>()->None
+-> _ = gen_buy_change_list()
+(Pdb) 
+```
+
+在金融量化领域，不建议使用过短的变量名、类名、函数名等，因为**试错成本太高，略显臃肿的名字可以规避很多问题，为了弥补这样的问题，在金融量化领域，列表推到、字典推到、高阶函数、lambda函数、三目表达式等技巧使用比较频繁。
+
+## 量化工具--Numpy
+Numpy是很多科学计算与工程库的基础库，Numpy就是量化数据分析领域的基础数组。
+
+Numpy底层实现使用了C语言和Forran语言的机制分配内存，输出一个非常大且联系的并由**同类型数组组成的内存区域**
+
+### 1
+构建10000个元素的普通列表循环求每个元素的平方，使用%timeit对比效率
+
+```python
+In [1]: import numpy as np
+
+In [2]: normal_list = range(10000)
+
+In [3]: %timeit [i**2 for i in normal_list]
+100 loops, best of 3: 2.34 ms per loop
+```
+运行时间是2.34ms
+
+使用np.arange()构建列表，运行效率会提高几个数量级
+
+```python
+In [2]: import numpy as np
+
+In [3]: np_list  = np.arange(10000)
+
+In [4]: %timeit np_list**2
+The slowest run took 296.86 times longer than the fastest. This could mean that an intermediate result is being cached.
+100000 loops, best of 3: 5.74 µs per loop
+```
+
+这里运行时间是5.74us
+
+Numpy数组和普通列表的操作方式也是不同的，**Numpy通过广播机制作用于每个内部元素**，是一种并行化执行的思想，普通的list则作用于整体
+
+通过代码来看差别
+
+```python
+In [5]: np_list = np.ones(5) * 3
+
+In [6]: print(np_list)
+[ 3.  3.  3.  3.  3.]
+
+In [7]: n_list = [1,1,1,1,1] * 3
+
+In [8]: print(n_list)
+[1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1]
+```
+
+### 2
+Numpy常见的初始化操作
+
+```python
+In [10]: np.zeros(100)
+Out[10]:
+array([ 0.,  0.,  0.,  0.,  0.,  0.,  0.,  0.,  0.,  0.,  0.,  0.,  0.,
+        0.,  0.,  0.,  0.,  0.,  0.,  0.,  0.,  0.,  0.,  0.,  0.,  0.,
+        0.,  0.,  0.,  0.,  0.,  0.,  0.,  0.,  0.,  0.,  0.,  0.,  0.,
+        0.,  0.,  0.,  0.,  0.,  0.,  0.,  0.,  0.,  0.,  0.,  0.,  0.,
+        0.,  0.,  0.,  0.,  0.,  0.,  0.,  0.,  0.,  0.,  0.,  0.,  0.,
+        0.,  0.,  0.,  0.,  0.,  0.,  0.,  0.,  0.,  0.,  0.,  0.,  0.,
+        0.,  0.,  0.,  0.,  0.,  0.,  0.,  0.,  0.,  0.,  0.,  0.,  0.,
+        0.,  0.,  0.,  0.,  0.,  0.,  0.,  0.,  0.])
+
+In [11]: np.zeros((3,2))
+Out[11]:
+array([[ 0.,  0.],
+       [ 0.,  0.],
+       [ 0.,  0.]])
+
+In [12]: np.ones((3,2))
+Out[12]:
+array([[ 1.,  1.],
+       [ 1.,  1.],
+       [ 1.,  1.]])
+
+In [13]: np.empty((2,3,3)) #shape x=2,y=3,z=3的矩阵，值随机
+Out[13]:
+array([[[ -0.00000000e+000,  -0.00000000e+000,   5.43472210e-323],
+        [  0.00000000e+000,   0.00000000e+000,   0.00000000e+000],
+        [  0.00000000e+000,   0.00000000e+000,   0.00000000e+000]],
+
+       [[  0.00000000e+000,   0.00000000e+000,   0.00000000e+000],
+        [              nan,               nan,  -0.00000000e+000],
+        [ -3.11109778e+231,  -1.97626258e-323,   2.00390436e+000]]])
+
+In [14]: np.ones_like(np_list) # 初始化序列与np_list意义，值全为1的矩阵
+Out[14]: array([ 1.,  1.,  1.,  1.,  1.])
+
+In [15]: np.zeros_like(np_list) # 初始化shape与np_list一样，值全为0的矩阵
+Out[15]: array([ 0.,  0.,  0.,  0.,  0.])
+
+In [16]: np.eye(3) #对角线全为1的单位矩阵
+Out[16]:
+array([[ 1.,  0.,  0.],
+       [ 0.,  1.,  0.],
+       [ 0.,  0.,  1.]])
+```
+
+`linspace()`方法，生成等间隔的数字
+
+在0~1之间等间隔生成10个元素的序列
+
+```
+In [17]: np.linspace(0,1,10)
+Out[17]:
+array([ 0.        ,  0.11111111,  0.22222222,  0.33333333,  0.44444444,
+        0.55555556,  0.66666667,  0.77777778,  0.88888889,  1.        ])
+```
+
+### 3
+生成服从正态分布的涨跌幅数据
+
+```
+In [19]: stock_cnt = 200 #200支股票
+
+In [20]: view_days = 504 #504个交易日
+
+# 生成服从正态分布：均值期望=0，标准差=1的序列
+In [21]: stock_day_change = np.random.standard_normal((stock_cnt, view_days))
+
+In [22]: print(stock_day_change.shape)
+(200, 504)
+
+# 打印第一只股票，前5个交易日的涨跌幅情况
+In [23]: print(stock_day_change[0:1, :5])
+[[ 0.63464531 -0.37501036  0.35212285  0.97899974 -1.24315714]]
+```
+
+输出结果为200行504列矩阵，每一行代表一只股票，每一列代表一个交易日。上面输出的`0.63464531`表示第一个交易日中价格上涨0.63464531
+
+这里通过切片的方式来选择数据
+
+```python
+In [24]: stock_day_change[0:2,:5]
+Out[24]:
+array([[ 0.63464531, -0.37501036,  0.35212285,  0.97899974, -1.24315714],
+       [ 0.86518928, -0.79618503,  0.1065087 , -1.28334236,  0.30882189]])
+```
+
+上面代码表示前两只股票前5个交易日的涨跌数据
+
+因为**Numpy内部实现机制全部是引用操作，所以当不使用`copy()`的时候得出的结果将会丢失**
+
+下面让numpy居中中首位数据交互一下
+
+```python
+In [24]: stock_day_change[0:2,:5]
+Out[24]:
+array([[ 0.63464531, -0.37501036,  0.35212285,  0.97899974, -1.24315714],
+       [ 0.86518928, -0.79618503,  0.1065087 , -1.28334236,  0.30882189]])
+
+In [25]: tmp = stock_day_change[0:2,0:5].copy()
+
+In [26]: stock_day_change[-2:,-5:]
+Out[26]:
+array([[ 0.79976582, -0.24276089, -0.59893516, -0.03116983, -0.517955  ],
+       [-1.22468834, -1.14144833, -0.55910722, -0.22906528, -0.8932027 ]])
+
+In [27]: stock_day_change[:2,:5] = stock_day_change[-2:,-5:]
+
+In [28]: stock_day_change[-2:,-5:] = tmp
+
+In [29]: stock_day_change[:2,:5],stock_day_change[-2:,-5:]
+Out[29]:
+(array([[ 0.79976582, -0.24276089, -0.59893516, -0.03116983, -0.517955  ],
+        [-1.22468834, -1.14144833, -0.55910722, -0.22906528, -0.8932027 ]]),
+ array([[ 0.63464531, -0.37501036,  0.35212285,  0.97899974, -1.24315714],
+        [ 0.86518928, -0.79618503,  0.1065087 , -1.28334236,  0.30882189]]))
+```
+
+### 4
+数据类型转换的目的有时为了数据规整，有时可以进一步看出有价值的数据
+
+下面通过`astype(int)`将涨跌数据转换为int，这样可以更加清晰的发现涨跌数据两端的极限值
+
+```python
+In [31]: print(stock_day_change[:2,:5])
+[[ 0.79976582 -0.24276089 -0.59893516 -0.03116983 -0.517955  ]
+ [-1.22468834 -1.14144833 -0.55910722 -0.22906528 -0.8932027 ]]
+
+In [32]: stock_day_change[:2,:5].astype(int)
+Out[32]:
+array([[ 0,  0,  0,  0,  0],
+       [-1, -1,  0,  0,  0]])
+```
+
+如果想要规整的float数据，可以使用`np.around()`函数
+
+```python
+In [33]: np.around(stock_day_change[:2,:5],2)
+Out[33]:
+array([[ 0.8 , -0.24, -0.6 , -0.03, -0.52],
+       [-1.22, -1.14, -0.56, -0.23, -0.89]])
+```
+
+很多时候需要处理的数据会有缺失，Numpy中的np.nan表示缺失
+
+```python
+In [34]: tmp_test = stock_day_change[:2,:5].copy()
+
+In [35]: tmp_test[0][0] = np.nan
+
+In [36]: tmp_test
+Out[36]:
+array([[        nan, -0.24276089, -0.59893516, -0.03116983, -0.517955  ],
+       [-1.22468834, -1.14144833, -0.55910722, -0.22906528, -0.8932027 ]])
+```
+
+可以使用`np.nan_to_num()`函数来用0填充nan，实质pandas中的dropna()和fillna()方法更适合处理nan
+
+```python
+In [37]: tmp_test= np.nan_to_num(tmp_test)
+
+In [38]: tmp_test
+Out[38]:
+array([[ 0.        , -0.24276089, -0.59893516, -0.03116983, -0.517955  ],
+       [-1.22468834, -1.14144833, -0.55910722, -0.22906528, -0.8932027 ]])
+```
+
+### 5
+找出切片内涨跌幅值超过0.5的股票时
+
+```python
+In [40]: mask = stock_day_change[:2,:5] > 0.5
+
+# 获得筛选结果，bool数组
+In [41]: mask
+Out[41]:
+array([[ True, False, False, False, False],
+       [False, False, False, False, False]], dtype=bool)
+In [44]: tmp_test[mask]
+#筛选出mask中值为True的值
+Out[44]: array([ 0.79976582])
+```
+
+一般通过一句代码来实现上面示例
+
+```python
+# 切片中大于0.5的元素赋值为1
+In [46]: tmp_test[tmp_test > 0.5] = 1
+
+In [47]: tmp_test
+Out[47]:
+array([[ 1.        , -0.24276089, -0.59893516, -0.03116983, -0.517955  ],
+       [-1.22468834, -1.14144833, -0.55910722, -0.22906528, -0.8932027 ]])
+```
+
+针对多重筛选条件，使用|、&完成复合的逻辑，**需要使用括号括起来**
+
+```python
+In [48]: tmp_test = stock_day_change[-2:,-5:]
+
+In [49]: tmp_test
+Out[49]:
+array([[ 0.63464531, -0.37501036,  0.35212285,  0.97899974, -1.24315714],
+       [ 0.86518928, -0.79618503,  0.1065087 , -1.28334236,  0.30882189]])
+
+In [50]: tmp_test[(tmp_test > 1) | (tmp_test < -1)]
+Out[50]: array([-1.24315714, -1.28334236])
+```
+
+### 6
+Numpy提供了通用序列化函数，可以高效方便地处理序列
+
+`np.all()`判断序列中所有元素是否全部都是true，对bool序列进行 与 操作
+
+```python
+# 判断切片中的数据是否都大于0，也就是是否都是上涨
+In [52]: np.all(stock_day_change[:2,:5]>0)
+Out[52]: False
+```
+
+`np.any()`判断序列中是否有元素为true，对bool序列进行 或 操作
+
+```python
+In [53]: np.any(stock_day_change[:2,:5]>0)
+Out[53]: True
+```
+
+两个序列对应的元素**两两比较**，`maximum()`结果集取大，`minimum()`结果集取小
+
+```python
+In [54]: np.maximum(stock_day_change[:2,:5], stock_day_change[-2:,-5:])
+Out[54]:
+array([[ 0.79976582, -0.24276089,  0.35212285,  0.97899974, -0.517955  ],
+       [ 0.86518928, -0.79618503,  0.1065087 , -0.22906528,  0.30882189]])
+```
+
+`np.unique()`函数可以让序列集中唯一且重复的值组成新的序列
+
+```python
+In [56]: change_int = stock_day_change[:2,:5].astype(int)
+
+In [57]: change_int
+Out[57]:
+array([[ 0,  0,  0,  0,  0],
+       [-1, -1,  0,  0,  0]])
+
+In [58]: np.unique(change_int)
+Out[58]: array([-1,  0])
+```
+
+`np.diff()`操作前后两个临近数值进行减法运行，默认情况下axis=1,axis表示操作轴向
+
+```python
+# axis默认为1，横向操作
+In [60]: np.diff(stock_day_change[:2,:5])
+Out[60]:
+array([[-1.04252671, -0.35617428,  0.56776533, -0.48678517],
+       [ 0.08324002,  0.58234111,  0.33004194, -0.66413742]])
+
+In [61]: stock_day_change[:2,:5]
+Out[61]:
+array([[ 0.79976582, -0.24276089, -0.59893516, -0.03116983, -0.517955  ],
+       [-1.22468834, -1.14144833, -0.55910722, -0.22906528, -0.8932027 ]])
+
+In [62]: 0.79976582 + 0.24276089
+Out[62]: 1.04252671
+```
+
+axis=0，则是纵向操作
+
+```python
+In [63]: np.diff(stock_day_change[:2,:5], axis=0)
+Out[63]: array([[-2.02445417, -0.89868744,  0.03982794, -0.19789545, -0.3752477 ]])
+```
+
+### 7
+
+`np.where()`函数在数据筛选、改造中有非常大的作用，其语法有点像三目运算符，第一个参数是条件表单式，如果成功走第二个参数，否则走第三个参数，**它返回的结果是一组序列**
+
+```python
+In [67]: tmp_test = stock_day_change[-2:,-5:]
+
+In [68]: np.where(tmp_test > 0.5, 1, 0)
+Out[68]:
+array([[1, 0, 0, 1, 0],
+       [1, 0, 0, 0, 0]])
+```
+
+如果数值大于0.5，则标记为1，否则保持不变
+
+```python
+In [69]: np.where(tmp_test > 0.5 , 1, tmp_test)
+Out[69]:
+array([[ 1.        , -0.37501036,  0.35212285,  1.        , -1.24315714],
+       [ 1.        , -0.79618503,  0.1065087 , -1.28334236,  0.30882189]])
+```
+
+如果逻辑表达式为复合逻辑条件，则使用`np.logical_and()`和`np.logical_or()`函数，下面实现值大于0.5并小于1的赋值为1，否则赋值为0
+
+```python
+In [70]: np.where(np.logical_and(tmp_test > 0.5 ,tmp_test < 1), 1, 0)
+Out[70]:
+array([[1, 0, 0, 1, 0],
+       [1, 0, 0, 0, 0]])
+```
+
+**np.where()函数在量化数据分析场景中用处巨大**
+
+### 8
+通过`np.save()`函数可以将Numpy序列持久化保持，**不需要添加文件后缀，save内部会自动生成`.npy`
+
+```python
+In [72]: np.save('./numpytest', stock_day_change)
+```
+
+使用`np.load()`函数即可加载，但需要加上`.npy`文件后缀
+
+```python
+In [74]: stock_day_change = np.load('./numpytest.npy')
+
+In [75]: stock_day_change.shape
+Out[75]: (200, 504)
+```
+
+### 9
+Numpy带来了不止是并行化执行的思想，更有统计学上的很多方法的实现，如期望`np.mean()`、方差`np.var()`、标准差`np.std()`
+
+```python
+In [76]: sdcf = stock_day_change[:4,:4]
+
+In [77]: sdcf
+Out[77]:
+array([[ 0.79976582, -0.24276089, -0.59893516, -0.03116983],
+       [-1.22468834, -1.14144833, -0.55910722, -0.22906528],
+       [-0.64717303,  0.00724261,  0.0042882 , -0.43108485],
+       [ 0.14903309, -0.04658385,  0.78992598, -0.17589422]])
+
+# axis=1横向对比，找出最大的值
+In [78]: np.max(sdcf, axis=1)
+Out[78]: array([ 0.79976582, -0.22906528,  0.00724261,  0.78992598])
+```
+
+其他统计方法
+
+```python
+# 最大跌幅
+In [79]: np.min(sdcf, axis=1)
+Out[79]: array([-0.59893516, -1.22468834, -0.64717303, -0.17589422])
+
+#振幅幅度
+In [80]: np.std(sdcf, axis=1)
+Out[80]: array([ 0.51403239,  0.41243818,  0.28295815,  0.37113559])
+
+#平均涨跌
+In [81]: np.mean(sdcf, axis=1)
+Out[81]: array([-0.01827501, -0.78857729, -0.26668177,  0.17912025])
+
+#最大涨幅
+In [82]: np.max(sdcf, axis=0)
+Out[82]: array([ 0.79976582,  0.00724261,  0.78992598, -0.03116983])
+
+#返回沿轴axis最大值的索引,最大涨幅股票
+In [83]: np.argmax(sdcf, axis=0)
+Out[83]: array([0, 2, 3, 0])
+
+#返回沿轴axis最小值的索引,最大跌幅股票
+In [85]: np.argmin(sdcf, axis=0)
+Out[85]: array([1, 1, 0, 2])
+```
+
+?>Python标准库中的`max()`和`min()`与`np.max()`和`np.min()`是相同的，在数据量非常小的情况下，Numpy库执行的效率会更慢，所有不必所有操作都用Numpy
+
+### 10
+
+`numpy.random.normal(loc=0.0, scale=1.0, size=None)` 高斯分布
+
+loc：float
+    此概率分布的均值（对应着整个分布的中心centre）
+scale：float
+    此概率分布的标准差（对应于分布的宽度，scale越大越矮胖，scale越小，越瘦高）
+size：int or tuple of ints
+    输出的shape，默认为None，只输出一个值
+
+期望是试验中每次可能的结果的概率乘以其结果的总和，反应一组数据平均取值大学，用于表示分布的中心位置
+
+$$ meax(X) = \mu = \sum_{i=1}^n{p_i}{x_i} $$
+
+方差是衡量一组数据离散程度的度量，概率论中方差用来度量数据和其期望直接的离散程度，方差越大，说明数据越离散
+
+$$ Var(X) = \sigma^2 = mean((X-\mu^2)) $$
+
+标准差为方差的算术平方根，标准差和变量的计算单位相同，所以比方差清晰，**很多时候在分析时使用更多的是标准差，方差与标准差都可以用于表示分布的离散程度**
+
+$$ Sid(X) = \sigma $$
+
+有a,b两个交易员，平均获利都是100元，但a交易者获利的获利稳定性不好，假设振幅50，即标准差为50
+
+```python
+In [86]: a_inverstor = np.random.normal(loc=100, scale=50, size=(100,1))
+
+In [87]: b_inverstor = np.random.normal(loc=100, scale=20, size=(100,1))
+
+#期望
+In [88]: a_inverstor.mean()
+Out[88]: 104.92527326730597
+
+#标准差
+In [89]: a_inverstor.std()
+Out[89]: 49.462933488780024
+
+#方差
+In [90]: a_inverstor.var()
+Out[90]: 2446.5817893154763
+```
+
+常会用到的np.random.randn(size)所谓标准正态分布（μ=0,σ=1），对应于np.random.normal(loc=0, scale=1, size)
+
+```python
+In [100]: import matplotlib.pyplot as plt
+
+# 收益绘制曲线
+In [101]: plt.plot(a_inverstor)
+Out[101]: [<matplotlib.lines.Line2D at 0x112cfd198>]
+
+# 水平直线 上线  期望值
+In [102]: plt.axhline(a_inverstor.mean()+a_inverstor.std(), color='r')
+Out[102]: <matplotlib.lines.Line2D at 0x112d02da0>
+
+# 水平直线 均值期望线
+In [103]: plt.axhline(a_inverstor.mean(), color='y')
+Out[103]: <matplotlib.lines.Line2D at 0x112d23d68>
+
+# 水平直线 下线
+In [104]: plt.axhline(a_inverstor.mean() - a_inverstor.std(), color='g')
+Out[104]: <matplotlib.lines.Line2D at 0x112d31ba8>
+
+In [105]: plt.show()
+```
+
+绘制结果如下：
+
+![](http://p6un02lk4.bkt.clouddn.com/20180710112131.png)
+
+除了上述分布工具外，偏度（skew）与峰度（kurt）也经常使用
+
++ skew偏度，密度还是曲线尾部的相对长度
++ kurt峰度，反映频数分布曲线顶端尖峭或扁平程度的指标
+
+### 11
+
+正态分布又被称为高斯分布，因为高斯在1809年用该分布来预测星体的位置，正态曲线成钟型，又被称为钟型曲线
+
+正态分布特点：
+
++ 数据的标准差越大，数据分布离散程度越大
++ 数据的期望位于曲线的对称轴中心
+
+```python
+In [106]: import scipy.stats as scs
+# 均值期望
+In [107]: stock_mean = stock_day_change[0].mean()
+# 标准差
+In [108]: stock_std = stock_day_change[0].std()
+
+In [109]: stock_mean
+Out[109]: 0.021854761436593158
+
+In [110]: stock_std
+Out[110]: 1.0260375550650687
+
+# 绘制股票的直方图
+In [111]: plt.hist(stock_day_change[0], bins=50, normed=True)
+Out[111]:
+(array([ 0.01505249,  0.01505249,  0.        ,  0.03010498,  0.03010498,
+         0.04515748,  0.04515748,  0.03010498,  0.10536744,  0.07526246,
+         0.12041994,  0.12041994,  0.16557741,  0.1806299 ,  0.24083987,
+         0.22578738,  0.1956824 ,  0.31610233,  0.40641728,  0.45157476,
+         0.3763123 ,  0.36125981,  0.3763123 ,  0.51178473,  0.48167974,
+         0.31610233,  0.31610233,  0.27094486,  0.28599735,  0.15052492,
+         0.22578738,  0.21073489,  0.12041994,  0.09031495,  0.1806299 ,
+         0.15052492,  0.07526246,  0.03010498,  0.06020997,  0.09031495,
+         0.        ,  0.01505249,  0.06020997,  0.        ,  0.        ,
+         0.        ,  0.        ,  0.        ,  0.        ,  0.01505249]),
+ array([-2.96694602, -2.83513216, -2.70331831, -2.57150445, -2.4396906 ,
+        -2.30787675, -2.17606289, -2.04424904, -1.91243518, -1.78062133,
+        -1.64880747, -1.51699362, -1.38517977, -1.25336591, -1.12155206,
+        -0.9897382 , -0.85792435, -0.72611049, -0.59429664, -0.46248278,
+        -0.33066893, -0.19885508, -0.06704122,  0.06477263,  0.19658649,
+         0.32840034,  0.4602142 ,  0.59202805,  0.7238419 ,  0.85565576,
+         0.98746961,  1.11928347,  1.25109732,  1.38291118,  1.51472503,
+         1.64653889,  1.77835274,  1.91016659,  2.04198045,  2.1737943 ,
+         2.30560816,  2.43742201,  2.56923587,  2.70104972,  2.83286357,
+         2.96467743,  3.09649128,  3.22830514,  3.36011899,  3.49193285,
+         3.6237467 ]),
+ <a list of 50 Patch objects>)
+
+#linsapce从股票0最小值-->最大值生成数据
+In [112]: fit_linspace = np.linspace(stock_day_change[0].min(), stock_day_change[0].max())
+
+#概率密度函数（PDF，probability density function)又均值
+# 方差来描述曲线使用 scripy.stats.norm.pdf生成拟合曲线
+In [113]: pdf = scs.norm(stock_mean, stock_std).pdf(fit_linspace)
+
+In [114]: plt.plot(fit_linspace, pdf, lw=2, c='r')
+Out[114]: [<matplotlib.lines.Line2D at 0x1174223c8>]
+
+In [115]: plt.show()
+```
+pdf()函数在统计学中称为概率密度函数，是指在某个确定的取值点附近的可能性的函数，将概率值分配给各个事件，得到事件的概率分布，让时间数值化
+
+![](http://p6un02lk4.bkt.clouddn.com/20180710112911.png)
+
+**统计套利中均值回复策略的理论依据为价格将围绕着价值上下波动**，正态分布最大的特点即为它的数据会围绕某个期望均值附近上下摆动，摆动幅度为数据的标准差。
+
+### 12
+使用正态分布实现简单的量化策略
+
+继续使用之前生成的200支股票504天的服从正态分布的涨跌数据，保留后50天的最近数据作为策略的验证数据，并统计前454天的跌幅最大的3只股票，如果在第454天买入这3只股票会如何？
+
+```python
+In [1]: import numpy as np
+
+In [2]: stock_day_change = np.random.standard_normal((200, 504))
+
+In [3]: stock_day_change_test = stock_day_change[:200,0:504-50]
+
+# 打印出前454跌幅最大的三支，总跌幅通过np.sum计算，np.sort对结果排序
+In [4]: np.sort(np.sum(stock_day_change_test, axis = 1))[:3]
+Out[4]: array([-62.70181139, -52.01698315, -45.03146593])
+
+# 使用np.argsort针对股票跌幅进行排序，返回序号，即符合买入条件的股票序号
+In [5]: stock_lower_array = np.argsort(np.sum(stock_day_change_test,axis=1))[:3]
+
+In [6]: stock_lower_array
+Out[6]: array([124, 129, 119])
+```
+
+```python
+import numpy as np
+import matplotlib.pyplot as plt
+
+stock_cnt = 200
+view_days = 504
+keep_days = 50
+
+# 建立符合正态分布的涨跌数据，均值期望＝0，标准差＝1的序列
+stock_day_change = np.random.standard_normal((stock_cnt, view_days))
+stock_day_change_test = stock_day_change[:stock_cnt,0:view_days-keep_days]
+# 使用np.argsort针对股票跌幅进行排序，返回序号，即符合买入条件的股票序号
+stock_lower_array = np.argsort(np.sum(stock_day_change_test,axis=1))[:3]
+def show_buy_lower(stock_ind):
+    # 设置一个一行两列的可视化图表
+    _, axs = plt.subplots(nrows=1, ncols=2, figsize=(10, 4))
+    # 绘制前454天股票走势图，np.arange()在给定范围内获取均值，np.cumsum()：序列连续求和，涨跌数据相加，就是股票的涨幅的走势
+    axs[0].plot(np.arange(0, view_days - keep_days),
+                stock_day_change_test[stock_ind].cumsum())
+    # 从第454天开始到504天的股票走势
+    cs_buy = stock_day_change[stock_ind][view_days - keep_days:view_days].cumsum()
+    # 绘制从第454天到504天股票走势图
+    axs[1].plot(np.arange(view_days - keep_days, view_days), cs_buy)
+    # 返回从第454天开始到第504天计算盈亏的盈亏序列的最后一个值，通过一系列涨幅数据相加，最后一个数就是最终的涨跌值
+    return cs_buy[-1]
+
+# 最后输出的盈亏比例
+profit = 0
+
+# 跌幅最大的三支遍历序号
+for stock_ind in stock_lower_array:
+    # profit即三支股票从第454天买入开始计算，直到最后一天的盈亏比例
+    profit += show_buy_lower(stock_ind)
+
+print('买入第 {} 支股票，从第454个交易日开始持有盈亏:{:.2f}%'.format(
+    stock_lower_array, profit))
+
+plt.show()
+```
+
+输出结果和图像
+
+买入第 [183  46 149] 支股票，从第454个交易日开始持有盈亏:5.62%
+
+![](http://p6un02lk4.bkt.clouddn.com/20180711112637.png)
+
+我们选择了前454中跌幅最大的3只股票的理论依旧的事正态分布理论，这3只股票后期涨跌的分布一定是涨的概率大于跌的概率
+
+ayuliao:实际运行多次，可以发现，盈亏结果优势是负数，原因可能是，虽然涨的概率大于跌的概率，但是跌的幅度可能大于涨的幅度
+
+早期华尔街很多策略算法认为市场的涨跌服从正态分布：
+
++ 一方面，很多统计数据确实显示正态分布存在于很多金融市场
++ 另一方面，编写符合正态分布规律的算法更加简单
+
+现实生活汇总，由于人的参与以及很多突发事件，导致市场不可能绝对服从正态分布，导致“肥尾”
+
+### 13
+伯努利分布下，随机变量只有两个可能的取值，即1和0，如果随机变量取值1的概率为怕，则随机变量取值0的概率为1-p
+
+Numpy中使用`numpy.random.binomial(1,p)`获取1的概率为p的前提下，生成的随机变量。如果p=0.5，那么久类似投硬币的结果
+
+### 14
+在交易中，交易者容易处于不利地位的，不利的情况就是需要交手续费，如果你随机乱买股票，在足够多的本钱的情况下，交易足够多的次数，最后的结果一定是符合正态分布的。但如果每次要多交1%的手续费，那情况就大不一样了。
+
+实现函数`casino()`:假设100个赌徒，每个赌徒都有1000000元，并且每个人都想在赌场玩1000万次，在不同的胜率、赔率和手续费下`casino()`函数返回总体统计结果
 
 
+```python
+import numpy as np
+import matplotlib.pyplot as plt
+
+gamblers = 100 #100个赌徒
+
+def casino(win_rate, win_once=1, loss_once=1, commission=0.01):
+    my_money = 1000000
+    play_cnt = 10000000
+    commission = commission
+    for _ in np.arange(0, play_cnt):
+        # win_rate赢钱概率,根据伯努利分布根据win_rate获取输赢
+        w = np.random.binomial(1, win_rate)
+        if w:
+            # 赢钱，win_once赢钱数
+            my_money += win_once
+        else:
+            my_money -= loss_once
+
+        my_money -= commission #手续费
+        # 没钱就无法继续游戏
+        if my_money <=0:
+            break
+    return my_money
+
+# 没有老千，胜率为0.5，不收手续费，赔率是1，赔率等于 win_once/loss_once
+heaven_moneys = [casino(0.5, commission=0) for _ in np.arange(0, gamblers)]
+plt.title('heaven_moneys')
+plt.hist(heaven_moneys, bins=30)
+plt.show()
+
+# 有老千，胜率为0.4，不收手续费，赔率是1
+cheat_moneys = [casino(0.4, commission=0) for _ in np.arange(0, gamblers)]
+plt.title('cheat_moneys')
+plt.hist(cheat_moneys, bins=30)
+plt.show()
+
+# 没有老千，胜率为0.5，手续费0.01，赔率是1
+commission_moneys = [casino(0.5, commission=0.01) for _ in np.arange(0, gamblers)]
+plt.title('commission_moneys')
+plt.hist(commission_moneys, bins=30)
+plt.show()
+```
+
+没有老千，胜率为0.5，不收手续费，赔率是1的情况下，大家都活下来了，每个人亏的和赚的最后都不太多
+
+![](http://p6un02lk4.bkt.clouddn.com/20180711132555.png)
+
+有老千，胜率为0.4，不收手续费，赔率是1的情况下，所有人的钱都归0了
+
+![](http://p6un02lk4.bkt.clouddn.com/20180711125800.png)
+
+有老千，胜率为0.5，手续费0.01，赔率是1的情况下，没有人赚钱，都是亏钱(手上的金额都小于初始化金额1000000)，如果玩的次数在加大一个数量级，**最后的结果也是全部人的钱都归0**
+
+![](http://p6un02lk4.bkt.clouddn.com/20180711135801.png)
+
+如果将游戏次数设置为100万次，情况就有所不同
+
+![](http://p6un02lk4.bkt.clouddn.com/20180711121623.png)
+![](http://p6un02lk4.bkt.clouddn.com/20180711122006.png)
+![](http://p6un02lk4.bkt.clouddn.com/20180711142937.png)
+
+只有当游戏的次数足够多时，才能发现规律
+
+我们不能期待自己有**老千**的能力，也就是赢的概率无法提高，那为了赚钱，只能将赔率提高了，**赔率=每次赢钱数/每次输钱数**
+
+下面我们将win_once提高到1.02，loss_once降低到0.98，这样赔率就是 1.02/0.98 = 1.040816，让100个赌徒进入这个非均衡赔率的赌场
+
+结果如图：
+
+![](http://p6un02lk4.bkt.clouddn.com/20180711150021.png)
+
+发现每个人都赚了钱（金额都比1000000多），这不合理，凭什么你每次多赢输少呢？（赢钱转1.02元，输钱数0.98元），为了让其合理，应该要降低赢的概率，这样做其实就是每本交易的书都会提到止损策略。
+
+这些策略的核心思想就是让赚钱的股票多赚钱，让亏损的股票少亏损，这样的结果就是亏损的次数比赢钱的次数多，但每次赢的钱比每次亏的钱多，也就是高止盈位，低止损位。
+
+使用上面的止盈止损策略会降低胜率，所以不能平白无故提高win_once，对应的需要降低win_rate，将win_rate降低为0.45，即胜率为0.45，win_once和loss_once都不变动。
+
+运行结果如下：
+
+![](http://p6un02lk4.bkt.clouddn.com/20180711152815.png)
+
+有变回回了有赢有输的情况，也就是`heaven_moneys`的情况
+
+**大多数交易者的胜率非常高，但他们的账号最终都是亏损的，交易中最虚幻的就是胜率，但大多数人追求的反而是胜率，不关注盈亏比等其他重要因素，量化交易的核心依旧是交易，交易的基本法则依旧适用**
+
+## 量化工具--pandas
+
+### 1
+pands是金融数据分析、量化交易等领域的重要工具，pandas的两大主要工具DataFrame和Series的框架设计与API参考方向都来源与统计分析语言R。
+
+如果你有几GB，甚至1-2TB，使用pandas来处理数据依旧是最好的选择，对于更大的数据，就需要动用Hadoop、Spark了，它们的优势在于集群的云端数据处理
+
+### 2
+在前面使用Numpy中，使用了`np.argmax()`来纵向寻找哪一只股票在某个交易日涨幅最大，`np.argmax()`方法返回的也只是一个数字序列
+
+而使用pandas就简单很多了，首先构建一个DataFrame对象，只传入Numpy对象stock_day_cahgne，使用`head()`方法显示生成的表格对象的前5行数据
+
+```python
+import numpy as np
+import pandas as pd
+
+stock_day_change = np.random.standard_normal((200, 504))
+pd.DataFrame(stock_day_change).head()
+```
+
+![](http://p6un02lk4.bkt.clouddn.com/20180711132856.png)
+
+?>pandas是在numpy基础上构建的，所以Numpy的很多实用方法以及Numpy的很多通用函数都可以直接在pandas的对象上直接使用，如切片
+
+```python
+pd.DataFrame(stock_day_change)[:5]
+```
+效果与上面的一样
+
+![](http://p6un02lk4.bkt.clouddn.com/20180711133044.png)
+
+使用Numpy数组直接构建DataFrame对象会默认将行列索引加上数据序号
+但这样行列索引名称的意义没有什么作用，下面就让行列索引产生实质的意义
+
+使用股票0、股票1作为股票的行索引
+
+```python
+#股票0 --> 股票stock_day_change.shape[0]
+stock_symbols = ['股票'+str(x) for x in range(stock_day_change.shape[0])]
+# 通过构造直接设置inde参数，head(2)就显示两行
+pd.DataFrame(stock_day_change, index=stock_symbols).head(2)
+```
+
+![](http://p6un02lk4.bkt.clouddn.com/20180711133725.png)
+
+使用`pd.date_range()`函数生成一组连续的时间序列
+
+```python
+days = pd.date_range('2017-1-1', 
+                     periods=stock_day_change.shape[1], freq='1d')
+stock_symbols = ['股票' + str(x) 
+                 for x in range(stock_day_change.shape[0])]
+# 行通过index指定索引，列通过columns指定索引
+df = pd.DataFrame(stock_day_change, index=stock_symbols, columns=days)
+df.head(2)
+```
+
+![](http://p6un02lk4.bkt.clouddn.com/20180711145022.png)
+
+### 3
+
+量化交易中，最常见的数据类型就是金融时间序列，对于时间序列的处理，pandas有非常友好的方法来分析挖掘数据
+
+下面代码首先将数据df(上面刚刚生成的数据)做个**转置**，得到行索引为时间，列索引为股票代码的金融时间序列
+
+```python
+df = df.T #转置
+df.head() #获得数据前5行
+```
+
+![](http://p6un02lk4.bkt.clouddn.com/20180711145849.png)
+
+```python
+# 对df重新采样，以21天为周期，对21天内的时间求平局来重塑数据
+df_20 = df.resample('21D').mean()
+df_20.head()
+```
+
+![](http://p6un02lk4.bkt.clouddn.com/20180711145806.png)
 
 
+```python
+#通过 df['股票0']获得股票数据，返回变量类型是series
+df_stock0 = df['股票0']
+print(type(df_stock0))
+df_stock0.head()
+```
+
+结果如下：
+
+```
+<class 'pandas.core.series.Series'>
+2017-01-01   -1.194748
+2017-01-02    1.387978
+2017-01-03    1.547652
+2017-01-04    1.345085
+2017-01-05    1.015103
+Freq: D, Name: 股票0, dtype: float64
+```
+
+series是pandas中非常重要的类，可以将series简单理解为只有一列数据的DataFrame对象，它们之间大多数函数都可以通用，使用方法也很类似，如head()函数，打印出Series的前5行数据
+
+?>jupyter显示matplotlib图片，在绘图前，使用%matplotlib inline
+
+```python
+%matplotlib inline
+df_stock0.cumsum().plot()
+```
+
+![](http://p6un02lk4.bkt.clouddn.com/20180711151649.png)
+
+?>pandas在基于封装numpy的数据操作上还封装了matplotlib，使用它可以通过很简短的代码实现复杂的任务
+
+### 4
+之前使用`resample()`函数重采样，所有股票网站都提供了日k线、周k线、月k线等周期数据，但最原始的数据只有日k线数据，下面通过重采样实现周k线、月k线构建
+
+```python
+#cumsum()序列连续求和
+df_stock0_5 = df_stock0.cumsum().resample('5D').ohlc()
+df_stock0_20 = df_stock0.cumsum().resample('21D').ohlc()
+df_stock0_5.head()
+```
+
+![](http://p6un02lk4.bkt.clouddn.com/20180711152415.png)
+
+将数据的高开低收k线图绘制出来，也就是成功的从日线级别的数据重写构建出周线数据，并且可视化，这里要使用abu系统中的代码，我将其单独抽取出来
+
+```
+import matplotlib.pyplot as plt
 
 
+"""不画量只画价格"""
+g_only_draw_price = False
 
+# TODO 可设置的红涨绿跌，还是绿涨红跌
+__colorup__ = "red"
+__colordown__ = "green"
 
+def _do_plot_candle(date, p_open, high, low, close, volume, view_index, symbol, day_sum, minute):
+    """
+    绘制不可交互的k线图
+    param date: 融时间序列交易日时间，pd.DataFrame.index对象
+    :param p_open: 金融时间序列开盘价格序列，np.array对象
+    :param high: 金融时间序列最高价格序列，np.array对象
+    :param low: 金融时间序列最低价格序列，np.array对象
+    :param close: 金融时间序列收盘价格序列，np.array对象
+    :param volume: 金融时间序列成交量序列，np.array对象
+    :param symbol: symbol str对象
+    :param day_sum: 端线图 matplotlib的版本有些有bug显示不对
+    :param minute: 是否是绘制分钟k线图
+    """
 
+    # 需要内部import不然每次import abupy都有warning，特别是子进程很烦人
+    try:
+        # noinspection PyUnresolvedReferences, PyDeprecation
+        import matplotlib.finance as mpf
+    except ImportError:
+        # 2.2 才会有
+        # noinspection PyUnresolvedReferences, PyDeprecation
+        import matplotlib.mpl_finance as mpf
 
+    if not g_only_draw_price:
+        # 成交量，价格都绘制
+        # noinspection PyTypeChecker
+        fig, (ax1, ax2) = plt.subplots(2, sharex=True, figsize=(20, 12))
+    else:
+        # 只绘制价格
+        fig, ax1 = plt.subplots(figsize=(6, 6))
+    if day_sum:
+        # 端线图绘制
+        qutotes = []
+        for index, (d, o, c, l, h) in enumerate(zip(date, p_open, close, low, high)):
+            d = index if minute else mpf.date2num(d)
+            val = (d, o, c, l, h)
+            qutotes.append(val)
+        # plot_day_summary_oclh接口，与mpf.candlestick_ochl不同，即数据顺序为开收低高
+        mpf.plot_day_summary_oclh(ax1, qutotes, ticksize=5, colorup=__colorup__, colordown=__colordown__)
+    else:
+        # k线图绘制
+        qutotes = []
+        for index, (d, o, c, h, l) in enumerate(zip(date, p_open, close, high, low)):
+            d = index if minute else mpf.date2num(d)
+            val = (d, o, c, h, l)
+            qutotes.append(val)
+        # mpf.candlestick_ochl即数据顺序为开收高低
+        mpf.candlestick_ochl(ax1, qutotes, width=0.6, colorup=__colorup__, colordown=__colordown__)
 
+    if not g_only_draw_price:
+        # 开始绘制成交量
+        ax1.set_title(symbol)
+        ax1.set_ylabel('ochl')
+        ax1.grid(True)
+        if not minute:
+            ax1.xaxis_date()
+        if view_index is not None:
+            # 开始绘制买入交易日，卖出交易日，重点突出的点位
+            e_list = date.tolist()
+            # itertools.cycle循环使用备选的颜色
+            for v, csColor in zip(view_index, itertools.cycle(K_PLT_MAP_STYLE)):
+                try:
+                    v_ind = e_list.index(v)
+                except Exception as e:
+                    # logging.exception(e)
+                    logging.debug(e)
+                    # 向前倒一个
+                    v_ind = len(close) - 1
+                label = symbol + ': ' + str(date[v_ind])
+                ax1.plot(v, close[v_ind], 'ro', markersize=12, markeredgewidth=4.5,
+                         markerfacecolor='None', markeredgecolor=csColor, label=label)
 
+                # 因为candlestick_ochl 不能label了，所以使用下面的显示文字
+                # noinspection PyUnboundLocalVariable
+                ax2.plot(v, 0, 'ro', markersize=12, markeredgewidth=0.5,
+                         markerfacecolor='None', markeredgecolor=csColor, label=label)
+            plt.legend(loc='best')
 
+        # 成交量柱子颜色，收盘价格 > 开盘，即红色
+        # noinspection PyTypeChecker
+        bar_red = np.where(close >= p_open, volume, 0)
+        # 成交量柱子颜色，开盘价格 > 收盘。即绿色
+        # noinspection PyTypeChecker
+        bar_green = np.where(p_open > close, volume, 0)
 
+        date = date if not minute else np.arange(0, len(date))
+        ax2.bar(date, bar_red, facecolor=__colorup__)
+        ax2.bar(date, bar_green, facecolor=__colordown__)
 
+        ax2.set_ylabel('volume')
+        ax2.grid(True)
+        ax2.autoscale_view()
+        plt.setp(plt.gca().get_xticklabels(), rotation=30)
+    else:
+        ax1.grid(False)
 
+    plt.show()
+      
+        
 
+_do_plot_candle(df_stock0_5.index,                                 df_stock0_5['open'].values,                                   df_stock0_5['high'].values,                                   df_stock0_5['low'].values,                                  df_stock0_5['close'].values,                                np.random.random(len(df_stock0_5)),
+ None, 'stock',day_sum=False,minute=False)
+```    
 
+绘制结果如下：
 
+![](http://p6un02lk4.bkt.clouddn.com/20180711155141.png)
+
+图是通过matplotlib绘制的，这里的成交量volume是随机生成的数据
+
+### 5
+
+通过真实数据来使用pandas，书中使用abu系统中的方法获取沙箱里特斯拉2年内的股票数据，这里依旧通过tushare来获得汇川技术2016-2018这两年内的股票数据
+
+```python
+import tushare as ts
+hc_data = ts.get_k_data('300124',start='2016-01-01', end='2018-01-01')
+print(type(hc_data))
+hc_data.tail()
+```
+
+tushare获取数据的类型就是pandas的DataFrame，使用tail()可以获得DataFrame最后5行数据
+
+![](http://p6un02lk4.bkt.clouddn.com/20180711160535.png)
+
+通过pandas的plot()函数绘制出汇川技术这支股票在2016年到2018年这两年间的大致情况
+
+![](http://p6un02lk4.bkt.clouddn.com/20180711160736.png)
+
+通过pandas的DataFrame对象总览数据的函数info()的用途是查看数据是否有缺失、以及各个子数据的数据类型
 
 
